@@ -1,2 +1,2 @@
 # TINA
-TINA (Tactical Information Navigation Assistant
+TINA (Tactical Information Navigation Assistan)
