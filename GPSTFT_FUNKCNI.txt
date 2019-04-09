@@ -1,0 +1,124 @@
+#include <SPI.h> // Knihovna pro
+#include <SoftwareSerial.h> // Knihovna pro virtualni seriovou linku
+#include <TinyGPS.h> //Knihovna pro praci s GPS
+#include <SD.h>// Knihovan pro praci s SD kartou
+//Sada knihoven pro TFT LCD a dotykovou rezsitivni plochu
+#include <SPFD5408_Adafruit_GFX.h>
+#include <SPFD5408_Adafruit_TFTLCD.h>
+#include <SPFD5408_TouchScreen.h>
+#define LCD_CS A3 // Chip Select zapojen na Analog 3
+#define LCD_CD A2 // Command/Data zapojen na Analog 2
+#define LCD_WR A1 // LCD Write zapojen na Analog 1
+#define LCD_RD A0 // LCD Read zapojen na Analog 0
+#define LCD_RESET A4 //LCD Reset zapojen na Analog 4
+// rozsah hodnot pro obì osy dotykové vrstvy
+#define TS_MINX 150
+#define TS_MINY 120
+#define TS_MAXX 920
+#define TS_MAXY 940
+// nastavení rùzných barev pro výpis na displej
+#define BLACK   0x0000
+#define BLUE    0x001F
+#define RED     0xF800
+#define GREEN   0x07E0
+#define CYAN    0x07FF
+#define MAGENTA 0xF81F
+#define YELLOW  0xFFE0
+#define WHITE   0xFFFF
+#define YP A1
+#define XM A2
+#define YM 7
+#define XP 6
+TouchScreen dotyk = TouchScreen(XP, YP, XM, YM, 470); //Nastaveni dotykove plochy, 470 je odpor mereni mezi YM a XP
+Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET); //Nastaveni pinu tft
+TinyGPS gps; //inicializace gps
+SoftwareSerial GPS(0,1); //nastaveni softwarove seriove linky
+long lat, lon; //deklarace promennych 
+float LAT, LATuloz, LON, LONuloz, ALT, SAT, speed, CAS, SMER; //deklarace promennych
+const int chipSelect = 4; //vyber chipu z knihovny pro tft
+void setup() { //funkce pro zakladni nastaveni
+  Serial.begin(9600); //nastaveni rychlosti seriove linky
+  pinMode(10, OUTPUT); //nastaveni pinu 10 jako vystupu
+  tft.begin(0x7575); //zapnuti tft s danym radicem - dle knihovny
+  tft.setRotation(0); //nastaveni nuloveho otoceni displeje, moznost otacet po 90 ¡
+  tft.fillScreen(BLACK); //nastaveni cerneho pozadi
+  tft.setCursor(0, 0); //nastaveni kurzoru na pozici 0,0
+  tft.setTextColor(WHITE); //nastaveni barvy textu na bilou
+  GPS.begin(9600); //nastaveni rychlosti seriove komunikace pro GPS
+  if (!SD.begin(chipSelect)) { //inicializace SD modulu s vyberem chipu
+    Serial.println("Card failed, or not present"); //pokud neni iniciovan tak vypise chybu
+  return;
+    }
+    Serial.println("card initialized."); //potvrzeni inicializace
+    }
+void loop() { //smycka
+  getGPS();  //zavolani funkce getGPS - vycitani hodnot z GPS
+  tft.fillScreen(BLACK); //nastaveni pozadi na cernou - zajisteni prekreslovani tft
+  tft.setTextSize(3); //nastaveni velikosti pisma
+  tft.setCursor(0, 0); //nastaveni kurzoru na pozici 0,0
+  tft.print("Lat:"); //vypise na tft retezec Lat
+  tft.println(LAT/1000000,5); //vypise  na stejny radek hodnotu LAT podelenou milionem a zaokrouhlenou na 5 des. mist
+  tft.print("Lon:"); //vypise na novy radek Lon
+  tft.println(LON/1000000,5); //vypise  na stejny radek hodnotu LON podelenou milionem a zaokrouhlenou na 5 des. mist
+  tft.print("Vys:"); //vypise na novy radek Vys
+  tft.println(ALT); //vypise na stejny radek hodnotu ALT
+  tft.print("Sat:"); //vypise na novy radek Sat
+  tft.println(SAT); //vypise na stejny radek pocet prijmanych satelitu
+  tft.print("Rych:"); //vypise na novy radek Rych
+  tft.println(speed); //vypise na stejny radek rychlost pohybuS
+  tft.print("Smer:"); //vypise na novy radek Smer
+  tft.println(SMER); //vypise na stejny radek hodnotu smeru
+  String dataString = ""; //deklarace promenne - slouzi pro zapsani vysledku do retezce
+  dataString += "Mesto";
+  dataString += ",";
+  dataString += "Cast";
+  dataString += ",";
+  double latt = (LAT/100);
+  dataString += String(latt);
+  double lonn = (LON/100);
+  dataString += ",";
+  dataString += String(lonn);
+  File dataFile = SD.open("datalog.txt", FILE_WRITE);
+  // pokud se otevøení povedlo, data se zapíší do složky
+  if (dataFile) 
+    {
+      dataFile.println(dataString);
+      dataFile.close();
+      Serial.println(dataString);
+    }  
+    else 
+    {
+      Serial.println("error opening datalog.txt");
+    } 
+    //delay(5000);
+  }  
+void getGPS(){
+  bool newdata = false;
+  unsigned long start = millis();
+  while (millis() - start <1000)
+    {
+      if (feedgps ())
+        {
+          newdata = true;
+        }
+    }
+  if (newdata)
+    {
+      gps.get_position(&lat, &lon);
+      speed = gps.speed();
+      SAT = gps.satellites();
+      ALT = gps.f_altitude();      
+      SMER = gps.f_course();
+      LAT = lat; 
+      LON = lon;
+      feedgps(); 
+    }
+}
+bool feedgps(){
+  while (GPS.available())
+  {
+    if (gps.encode(GPS.read()))
+    return true;
+  }
+  return 0;
+}
